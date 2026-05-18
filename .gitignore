@@ -1,0 +1,23 @@
+# Python virtual envs
+.venv/
+venv/
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# macOS / editor
+.DS_Store
+.vscode/
+
+# Raw data + heavy run artefacts
+data/raw/
+results/predictions/
+results/logs/
+
+# Local-only docs (not pushed to remote)
+CLAUDE.md
+PROJECT_NOTES.md
+
+# Background-task output dumps
+*.output
