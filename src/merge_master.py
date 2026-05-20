@@ -1,28 +1,4 @@
-"""src/merge_master.py: Stage 4. Merge RV, stock predictors, and macro into per-stock master DFs.
-
-For each ticker in TICKERS, produces data/final/master_<TICKER>.csv with columns:
-
-  RV          target. Realized variance at date t
-  RVD         RV_{t-1}                              (HAR daily lag)
-  RVW         mean(RV_{t-5..t-1})                   (HAR weekly lag)
-  RVM         mean(RV_{t-22..t-1})                  (HAR monthly lag)
-  RQ_lag      RQ_{t-1}                              (used by HARQ as sqrt(.))
-  M1W         sum_{i=1..5} r_{t-i}                  (no extra shift; Stage 3 alignment)
-  d_log_dvol  log $VOL_{t-1} - log $VOL_{t-2}       (shift(1) of Stage 3 value)
-  EA          1 if day t is an EA day, else 0       (forward-looking; no shift)
-  VIX         CBOE VIX at t-1                       (shift(1))
-  d_US3M      rate_{t-1} - rate_{t-2}, after ffill  (Stage 2 policy + shift(1))
-  HSI         (HK log return)^2 at t-1, 0-filled    (Stage 2 policy + shift(1))
-  ADS         Aruoba-Diebold-Scotti at t-1          (shift(1))
-  EPU         daily EPU at t-1                      (shift(1))
-
-Drop the leading rows where RVM is NaN (the 22-day rolling lag). All other lag
-columns have shorter leading NaN runs nested inside the same window, so this
-single subset suffices.
-
-All features on row t are observable at end of day t-1 (predictively safe).
-EA is the one explicit forward-looking feature, since earnings dates are scheduled.
-"""
+"""Merge realized variance, lagged HAR terms, stock predictors, and macro covariates into per-stock master DataFrames."""
 
 from __future__ import annotations
 
@@ -58,7 +34,7 @@ def load_rv_with_lags(ticker: str) -> pd.DataFrame:
 
 
 def load_stock_predictors(ticker: str) -> pd.DataFrame:
-    """Load covariates_<ticker>.csv and apply the per-feature lag policy from Stage 4 docstring."""
+    """Load covariates_<ticker>.csv and apply the per-feature predictive-lag policy."""
     cov = pd.read_csv(INTERIM_DIR / f"covariates_{ticker}.csv",
                       parse_dates=["date"], index_col="date")
     out = pd.DataFrame(index=cov.index)
@@ -69,9 +45,7 @@ def load_stock_predictors(ticker: str) -> pd.DataFrame:
 
 
 def align_macro(trading_dates: pd.DatetimeIndex) -> pd.DataFrame:
-    """Load each external macro series, align to the trading-day index, apply
-    the Stage 2 policies, and shift by 1 day. Returns a DataFrame indexed by
-    trading_dates with columns VIX, d_US3M, HSI, ADS, EPU."""
+    """Align the external macro series to the trading-day index and shift one day for predictive validity."""
     vix = pd.read_csv(EXTERNAL_DIR / "vix.csv",
                       parse_dates=["date"], index_col="date")["value"]
     vix_aligned = vix.reindex(trading_dates)

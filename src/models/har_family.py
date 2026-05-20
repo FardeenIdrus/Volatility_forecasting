@@ -1,29 +1,4 @@
-"""src/models/har_family.py: Stage 6. HAR family fits with rolling-window forecasts.
-
-For each (ticker, info_set, model_name) at the 1-day horizon:
-  - Build features per spec (see ModelSpec). LogHAR log-transforms RV-lags and
-    additionally VIX in M_ALL; HARQ adds the RVD * sqrt(RQ_lag) interaction.
-  - Initial fit on the first 1776-day window (train+val). For LogHAR this fit
-    also fixes the Jensen-bias-correction variance. Paper footnote 11:
-    "var(f̂(Z_t)) is the variance of the residuals in the training and validation
-    set", i.e. computed ONCE and reused across all rolling steps.
-  - Rolling OLS forecast through the test set:
-      window size = 1776 days; refit at each step using the most recent observed
-      1776 days, predict the next day.
-  - LogHAR: predict in log space; bias-correct via exp(pred + 0.5 * var_fixed).
-  - Negative-clipping for all models (per paper §1.6): if pred < 0, replace with
-    min(in-sample RV in current rolling window).
-  - HARQ additionally applies the BPQ-2016 upper-clip: if pred > max(in-sample
-    RV), replace with min(in-sample RV).
-  - Save predictions to results/predictions/<ticker>_<infoset>_<model>_h1.csv.
-
-This script does not standardise X (HAR family uses raw features, per paper §1.3
-which standardises only ML models). Coefficients are in raw-feature units.
-
-HAR-X is omitted from M_HAR (it equals HAR there per paper Tables 2/6).
-HAR is included in both M_HAR and M_ALL. It's the same model (the benchmark
-whose MSE is 1.000 in the paper's tables for each info-set).
-"""
+"""HAR-family models (HAR, HAR-X, LogHAR, HARQ) estimated by rolling-window OLS."""
 
 from __future__ import annotations
 
@@ -87,8 +62,7 @@ def get_specs(info_set: str) -> list[ModelSpec]:
 
 
 def build_features(df: pd.DataFrame, spec: ModelSpec) -> pd.DataFrame:
-    """Construct feature DataFrame for a model: apply log-transforms, append HARQ
-    interaction if needed. The HARQ interaction is RVD * sqrt(RQ_lag)."""
+    """Build the model's feature DataFrame: apply log-transforms and the HARQ interaction."""
     out = pd.DataFrame(index=df.index)
     for col in spec.feature_cols:
         if col in spec.log_cols:
@@ -116,11 +90,8 @@ def predict_ols(ols, X_row: pd.DataFrame) -> float:
 
 def initial_fit(master: pd.DataFrame, spec: ModelSpec,
                 test_start_idx: int, window_size: int, h: int):
-    """Fit on the first rolling window (= train+val). Used for the coefficient
-    diagnostic and, for LogHAR, to fix the Jensen-bias-correction variance.
-    Target is master['y_target'], populated by build_h_step_target before fit-time.
-    Window is lagged by h-1 rows so every training label is realised (no look-ahead);
-    for h=1 this is a no-op. The max(0, .) clamp keeps the window start in range."""
+    """Fit OLS on the first rolling window (train+val) for diagnostics and the LogHAR bias variance."""
+    # Lag the window by h-1 rows so every training label is realised (no look-ahead).
     fit_end = test_start_idx - (h - 1)
     fit_start = max(0, fit_end - window_size)
     fit_df = master.iloc[fit_start:fit_end]
@@ -133,22 +104,7 @@ def rolling_forecast(master: pd.DataFrame, spec: ModelSpec,
                      test_start_idx: int, window_size: int,
                      fixed_resid_var: float | None, h: int
                      ) -> tuple[pd.Series, int, int]:
-    """One-day-ahead rolling-window forecast across the test segment.
-
-    fixed_resid_var: if not None, used in the LogHAR Jensen bias correction
-                     (computed once on the initial fit). Required when log_target.
-    h:               forecast horizon. The training window ends h-1 rows before
-                     the forecast origin so every training label y_target is
-                     realised at the origin (no look-ahead). For h=1 this is a
-                     no-op.
-
-    Returns (predictions, n_neg_clip, n_max_clip):
-      - predictions: Series indexed by test dates
-      - n_neg_clip:  count of times pred < 0 was replaced with min(in-window target)
-                     (applies to all models per paper §1.6)
-      - n_max_clip:  count of times pred > max(in-window target) was replaced
-                     (HARQ only; the BPQ-2016 upper clip)
-    """
+    """One-step-ahead rolling-window OLS forecast across the test segment."""
     if spec.log_target and fixed_resid_var is None:
         raise ValueError("LogHAR requires a fixed_resid_var from initial_fit")
 
@@ -159,6 +115,7 @@ def rolling_forecast(master: pd.DataFrame, spec: ModelSpec,
     n_max = 0
 
     for i, target_pos in enumerate(range(test_start_idx, n)):
+        # Lag the window by h-1 rows so every training label is realised (no look-ahead).
         fit_end = target_pos - (h - 1)
         fit_start = max(0, fit_end - window_size)
         fit_df = master.iloc[fit_start:fit_end]
@@ -224,12 +181,8 @@ def run_one(ticker: str, info_set: str, spec: ModelSpec, master: pd.DataFrame,
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Run all HAR-family fits across 3 stocks and 2 info-sets, then print diagnostics.
-
-    CLI:
-      python src/models/har_family.py        # h=1 (default)
-      python src/models/har_family.py 22     # h=22 (paper §4 monthly horizon)
-    """
+    """Run all HAR-family fits across three stocks and two info-sets, then print diagnostics."""
+    # CLI: python src/models/har_family.py [h]   (h defaults to 1; e.g. `... 22`).
     args = argv if argv is not None else sys.argv[1:]
     h = int(args[0]) if args else 1
     log.info("HORIZON h=%d", h)

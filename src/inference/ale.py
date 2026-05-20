@@ -1,23 +1,4 @@
-"""src/inference/ale.py: Stage 9. Accumulated Local Effects (ALE) variable importance.
-
-Hand-rolled per paper Eq. 28-31, 100 quantile bins (footnote 21).
-
-For each of 3 stocks, compute ALE on M_ALL for two models:
-  - RF: retrained on training set with Stage 7 hyperparameters.
-  - NN_2_e10: top-10 NN ensemble re-trained from the seeds logged in
-    results/logs/stage7_rolling.log (deterministic given the seed).
-
-Outputs per (stock, model):
-  results/figures/ale_<ticker>_<model>.png   11-panel ALE curve plot
-  results/figures/vi_<ticker>_<model>.png    horizontal bar chart of normalised VI
-  results/tables/ale_<ticker>_<model>.csv    long: feature, edge_idx, z_std, ale_centred
-  results/tables/vi_<ticker>_<model>.csv     wide: feature, vi_norm
-
-CLI:
-  python src/inference/ale.py                 # all 3 tickers
-  python src/inference/ale.py AAPL            # one ticker
-  python src/inference/ale.py JPM AMZN        # subset
-"""
+"""Accumulated Local Effects variable importance for the random forest and neural-net models."""
 from __future__ import annotations
 
 import logging
@@ -47,9 +28,9 @@ tf.get_logger().setLevel("ERROR")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FIGURES_DIR = PROJECT_ROOT / "results" / "figures"
 TABLES_DIR = PROJECT_ROOT / "results" / "tables"
-# Top-10 NN seeds are parsed from the most recent Stage 7 h=1 NN run. After the
-# NN y-standardisation re-run the seeds live in stage7_h1_nn.log.
-STAGE7_LOG = PROJECT_ROOT / "results" / "logs" / "stage7_h1_nn.log"
+# Top-10 NN seeds are parsed from the most recent h=1 NN run log written by
+# ml_models.py (after the NN y-standardisation fix); see stage7_h1_nn.log.
+NN_SEED_LOG = PROJECT_ROOT / "results" / "logs" / "stage7_h1_nn.log"
 ALE_MODELS = ("RF", "NN_2_e10")
 
 N_BINS = 100
@@ -65,17 +46,7 @@ RF_PARAMS = dict(
 def compute_ale(
     predict_fn, X: np.ndarray, feature_idx: int, n_bins: int = N_BINS,
 ) -> tuple[np.ndarray, np.ndarray, float]:
-    """Centred ALE curve and raw VI for one feature.
-
-    Steps (paper §3.2, Eq. 28-31):
-      1. Partition support of Z_j into n_bins quantile bins.
-      2. local_effect_k = avg_{t in k}[f(z_k, Z_!t) - f(z_{k-1}, Z_!t)].
-      3. Uncentred ALE = cumsum of local effects (length K+1, value at each edge).
-      4. Centre by subtracting mean of uncentred ALE at training obs.
-      5. VI = std of centred ALE at observed z_jt.
-
-    Batched: stack X_lower and X_upper for all bins as (2*T_0, J), one predict call.
-    """
+    """Centred ALE curve and raw variable-importance score for one feature (Apley & Zhu 2020, Eq. 28-31)."""
     z = X[:, feature_idx]
     T = len(z)
     edges = np.unique(np.quantile(z, np.linspace(0, 1, n_bins + 1)))
@@ -91,6 +62,7 @@ def compute_ale(
     X_lower[:, feature_idx] = edges[bin_idx - 1]
     X_upper[:, feature_idx] = edges[bin_idx]
 
+    # Batch all bins into a single predict call: lower- and upper-edge copies stacked.
     preds = predict_fn(np.vstack([X_lower, X_upper]))
     diff = preds[T:] - preds[:T]
 
@@ -127,7 +99,7 @@ def compute_all_features(
 # ---------- NN re-creation ----------
 
 def parse_top_seeds_from_log(log_path: Path) -> dict[str, list[int]]:
-    """Extract top-10 NN seeds per ticker from Stage 7 M_ALL diagnostic blocks."""
+    """Extract top-10 NN seeds per ticker from the NN ensemble diagnostic log."""
     text = log_path.read_text()
     pattern = re.compile(
         r"^\s*(\w+) × M_ALL:\s*$.*?^\s*top-10 seeds\s*:\s*\[([^\]]+)\]",
@@ -231,8 +203,8 @@ def run_for_stock(sp, top_seeds: list[int], ticker: str,
                  sorted(zip(cols, rf_vi.tolist()), key=lambda x: -x[1]))
 
     if "NN_2_e10" in models:
-        # Standardise y exactly as Stage 7 does, so the retrained seeds reproduce
-        # the Stage 7 ensemble (raw-y training would give different, ill-conditioned
+        # Standardise y exactly as ml_models.py does, so the retrained seeds reproduce
+        # the original ensemble (raw-y training would give different, ill-conditioned
         # nets). nn_predict inverts back to raw RV units. ALE is differences of
         # predictions, so the +mean cancels; VI normalisation also cancels the
         # *std factor, but we invert anyway to keep ALE curves in raw RV units.
@@ -260,13 +232,9 @@ def run_for_stock(sp, top_seeds: list[int], ticker: str,
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Stage 9 ALE driver.
-
-    CLI (tickers and model names can be mixed in any order):
-      python src/inference/ale.py                  # all 3 stocks, RF + NN
-      python src/inference/ale.py NN_2_e10         # all 3 stocks, NN only
-      python src/inference/ale.py AAPL RF          # AAPL only, RF only
-    """
+    """Compute ALE variable importance for the requested tickers and models."""
+    # CLI: python src/inference/ale.py [TICKER ...] [MODEL ...]  (args mix freely;
+    #   defaults to all 3 stocks and both models).
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
     np.random.seed(42); random.seed(42); tf.random.set_seed(42)
@@ -280,7 +248,7 @@ def main(argv: list[str] | None = None) -> None:
     requested_models = tuple(a for a in args if a in ALE_MODELS) or ALE_MODELS
     log.info("tickers=%s  models=%s", requested_tickers, list(requested_models))
 
-    top_seeds = parse_top_seeds_from_log(STAGE7_LOG)
+    top_seeds = parse_top_seeds_from_log(NN_SEED_LOG)
     if "NN_2_e10" in requested_models:
         missing = [t for t in requested_tickers
                    if len(top_seeds.get(t, [])) != NN_TOP]

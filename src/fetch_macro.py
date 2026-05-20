@@ -1,25 +1,4 @@
-"""src/fetch_macro.py: Stage 2. Download macro covariates.
-
-Downloads 5 daily macro series and saves each to data/external/<name>.csv.
-
-Sources:
-  - VIX     FRED VIXCLS, direct CSV download
-  - US3M    FRED DTB3, direct CSV download; also first-difference (d_rate)
-  - HSI     Yahoo ^HSI via yfinance; also log-return + log-return-squared
-  - ADS     Philadelphia Fed xlsx (not on FRED); read via openpyxl
-  - EPU     policyuncertainty.com daily US EPU index
-
-All HTTP fetches use the requests library's default User-Agent. (Empirically verified:
-FRED actively rejects browser-like UAs but accepts the default `python-requests/X.X`;
-Philly Fed and policyuncertainty.com accept the default too. Earlier worry about Akamai
-blocking was specific to curl's default UA, not Python's.)
-Date alignment to US trading days happens at Stage 4 (merge), not here.
-NaNs are preserved (e.g. FRED holidays, HSI HK-only holidays); merge stage handles forward-fill.
-
-Downstream M_ALL uses:
-  - d_rate from us3m.csv (not the level)
-  - log_ret_sq from hsi.csv (not close or log_ret)
-"""
+"""Download the five daily macro covariates (VIX, US3M, HSI, ADS, EPU) to data/external/."""
 
 from __future__ import annotations
 
@@ -51,6 +30,7 @@ EPU_URL = "https://www.policyuncertainty.com/media/All_Daily_Policy_Data.csv"
 def _http_get(url: str) -> bytes:
     """Download a URL using requests with its default User-Agent. Returns raw bytes."""
     log.info("  GET %s", url[:100] + ("..." if len(url) > 100 else ""))
+    # FRED rejects browser-like User-Agents; the requests-library default works.
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     return r.content

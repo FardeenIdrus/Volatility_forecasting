@@ -1,46 +1,5 @@
-"""src/models/ml_models.py: Stage 7. Four rolling-window ML models plus one fixed-window NN.
-
-Per Stage 7 design:
-  - Lasso, ElasticNet, RF, GB use ROLLING refits per paper §2.
-      * RF:                 window = 1776 (train + val merged), per "BG and RF".
-      * Lasso / EN / GB:    window = 1554 (train only), per "rolling scheme
-                            without concatenation of the training and validation set".
-      * Each rolling refit standardises X using the current window's mean/std
-        (ddof=0).
-      * Lasso / EN tune alpha (and l1_ratio for EN) via internal TimeSeriesSplit
-        CV on each rolling window.
-      * GB tunes learning_rate over {0.01, 0.1} ONCE on the initial train/val
-        split, then freezes for all rolling refits.
-  - NN: FIXED WINDOW per paper §2 ("weights are only found once in the initial
-    validation sample and not rolled forward... outside our budget" to roll).
-  - Use STANDARDISED features: per-window rescaling for rolling models, initial-
-    training-set scaler (sp.X_*_std from split.py) for NN.
-  - Lasso: LassoCV(alphas=logspace(-5, 2, 1000), cv=TimeSeriesSplit(5),
-    random_state=42). Alpha grid matches paper Table A.6.
-  - ElasticNet: ElasticNetCV(l1_ratio=[0.1, 0.2, ..., 0.9, 0.99],
-    cv=TimeSeriesSplit(5)). Ten-point l1-ratio grid matches paper Table A.6;
-    0.99 substituted for 1.0 because ElasticNetCV rejects pure-L1.
-  - RF: RandomForestRegressor(n_estimators=500, max_features=1/3,
-    min_samples_leaf=5, random_state=42). Matches paper Table A.6 (J/3 features,
-    min node size 5, 500 trees). Falls back to max_features=None for J <= 3
-    (degenerate case the paper's J=12 did not face).
-  - GB: GradientBoostingRegressor(n_estimators=500, max_depth=2, random_state=42)
-    with learning_rate tuned over {0.01, 0.1} by validation MSE. Matches paper
-    Table A.6 tuning grid.
-  - NN_2_e10: 100 nets with seeds 0..99; architecture:
-        Dense(4, glorot_normal)->LeakyReLU(0.01)->Dropout(0.2)
-       ->Dense(2, glorot_normal)->LeakyReLU(0.01)->Dropout(0.2)
-       ->Dense(1, linear, glorot_normal)
-      Adam(lr=0.001), batch=32, max 500 epochs, EarlyStopping(patience=100,
-      restore_best_weights=True). Glorot normal initialiser per paper Table A.6.
-      Final prediction = mean over the top 10 nets (by validation MSE on the
-      222-row validation set).
-
-Apply negative-clip (pred < 0 -> min(in-window RV) for rolling models;
-min(in-sample y_train) for NN) for all ML models per paper §1.6.
-
-Saves predictions to results/predictions/<ticker>_<infoset>_<model>_h1.csv.
-"""
+"""Machine-learning realized-variance forecasters: rolling-window Lasso, ElasticNet,
+random forest and gradient boosting, plus a fixed-window neural-net ensemble."""
 
 from __future__ import annotations
 
@@ -111,23 +70,7 @@ def rolling_ml_forecast(
     model_factory,
     h: int,
 ) -> tuple[pd.Series, list[dict], int]:
-    """One-day-ahead rolling-window forecast for an ML model.
-
-    Look-ahead-safe windowing: the training window ends h-1 rows before the
-    forecast origin, so every training label y_target (a forward h-day mean) is
-    fully realised at the origin. For h=1 this is a no-op.
-
-    At each test day t:
-      1. fit_slice  = master.iloc[max(0, t-(h-1)-window_size) : t-(h-1)]
-      2. target_row = master.iloc[[t]]
-      3. Standardise X with fit_slice mean/std (ddof=0); same scaler to target row.
-      4. Fit model_factory(X_fit_std, y_fit). Predict target row.
-      5. Negative-clip: pred < 0 -> min(in-window y_target) per paper §1.6.
-
-    Returns (predictions, per-step hyperparam diagnostics, n_neg_clip).
-    Per-step diagnostics expose model.alpha_ / model.l1_ratio_ if present
-    (Lasso / EN). Returns empty list otherwise.
-    """
+    """One-step-ahead rolling-window forecast for a single ML model."""
     n = len(master)
     out_dates = master.index[test_start_idx:]
     preds = pd.Series(index=out_dates, dtype=np.float64)
@@ -136,6 +79,7 @@ def rolling_ml_forecast(
     t0 = time.time()
 
     for i, target_pos in enumerate(range(test_start_idx, n)):
+        # Lag the window by h-1 rows so every training label is realised (no look-ahead).
         fit_end = target_pos - (h - 1)
         fit_start = max(0, fit_end - window_size)
         fit_slice = master.iloc[fit_start:fit_end]
@@ -245,13 +189,7 @@ def predict_nn_ensemble(nets, top_idx, X) -> np.ndarray:
 
 def run_one(ticker: str, info_set: str, model_name: str, sp, master: pd.DataFrame,
             h: int) -> dict:
-    """Fit one (ticker, info_set, model) combination, save predictions, return diagnostics.
-
-    sp.y_train / sp.y_val / sp.y_test must already reflect the h-step-ahead target
-    (overridden in main() after build_h_step_target). The master DF must have a
-    'y_target' column set the same way. For h>1 the test set is truncated by h-1
-    rows (NaN-target tail dropped).
-    """
+    """Fit one (ticker, info_set, model) cell, save test predictions, return diagnostics."""
     log.info("  %s × %s × %s (h=%d)", ticker, info_set, model_name, h)
     cols = feature_cols(info_set)
     test_start_idx = len(sp.X_train) + len(sp.X_val)
@@ -423,7 +361,7 @@ def run_one(ticker: str, info_set: str, model_name: str, sp, master: pd.DataFram
 
 
 def print_diagnostic(results: list[dict]) -> None:
-    """Print the Stage 7 diagnostic summary: MSE table, hyperparams, clips, NN stats."""
+    """Print the diagnostic summary: MSE table, hyperparams, clips, NN stats."""
     df = pd.DataFrame([{
         "ticker": r["ticker"], "info_set": r["info_set"], "model": r["model"],
         "test_mse": r["test_mse"], "n_neg_clip": r["n_neg_clip"],
@@ -475,13 +413,9 @@ def print_diagnostic(results: list[dict]) -> None:
 
 
 def main(argv: list[str] | None = None):
-    """Run ML models across 3 stocks and 2 info-sets, then print diagnostics.
-
-    CLI:
-      python src/models/ml_models.py             # h=1, all 5 models
-      python src/models/ml_models.py 22          # h=22, all 5 models
-      python src/models/ml_models.py 1 NN_2_e10  # h=1, NN only (comma-sep for more)
-    """
+    """Run the five ML models across three stocks and two info-sets, then print diagnostics."""
+    # CLI: python src/models/ml_models.py [h] [model1,model2,...]
+    #   `... 22` runs h=22 for all models; `... 1 NN_2_e10` runs h=1 for the NN only.
     args = argv if argv is not None else sys.argv[1:]
     h = int(args[0]) if args else 1
     model_filter = args[1].split(",") if len(args) > 1 else ML_MODELS

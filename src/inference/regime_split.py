@@ -1,22 +1,4 @@
-"""src/inference/regime_split.py: Stage 11. VIX-tercile regime split of test-set MSE.
-
-For each horizon h in {1, 5, 22} and each stock on M_ALL, the test set is split
-into three VIX regimes — low / mid / high volatility — by tercile of the VIX
-predictor already in the master DataFrame. Within each regime we compute the
-relative MSE vs HAR for the 5 representative models (HAR-X, LogHAR, ElasticNet,
-RF, NN_2_e10).
-
-Regime definition: pd.qcut on the *rank* of the VIX column (rank-based so the
-three bins are exactly equal-count regardless of VIX ties), restricted to each
-cell's test dates. VIX in the master is the lagged (shift-1) VIX predictor; it is
-market-wide, so the regime dates are essentially common across the three stocks.
-
-Output: results/tables/regime_split_h{1,5,22}.csv — long format
-        (ticker, regime, model, n_days, vix_lo, vix_hi, mse, rel_mse_to_HAR).
-
-Framing: this is *context* for why our 2023-24 test-period numbers differ from
-the paper's 2014-17 test period — NOT a deliberate regime-extension claim.
-"""
+"""VIX-tercile regime split of test-set MSE relative to HAR."""
 from __future__ import annotations
 
 import logging
@@ -128,7 +110,7 @@ def flip_analysis(tables: dict[int, pd.DataFrame]) -> None:
 
 
 def main() -> None:
-    """Run Stage 11 for all three horizons; write one CSV each; print diagnostics."""
+    """Run the regime split for all three horizons; write one CSV each; print diagnostics."""
     TABLES_DIR.mkdir(parents=True, exist_ok=True)
     tables = {}
     for h in HORIZONS:

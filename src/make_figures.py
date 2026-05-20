@@ -1,22 +1,4 @@
-"""src/make_figures.py: Stage 12. Final report figures and tables.
-
-Main report:
-  Figure 1  fig1_relative_mse        relative-MSE bars, 3 stocks x 2 info-sets x h={1,22}
-  Table 1   table1_main              relative MSE + DM stars, 5 models x 12 cells
-  Figure 2  fig2_vi                  ALE-based VI, 3 stocks x {RF, NN} on M_ALL, h=1
-
-Appendix:
-  Fig A1    figA1_rv_series          RV time series (annualised vol %), train/val/test marks
-  Fig A2    figA2_relative_mse_3h    relative-MSE bars including h=5 (3 horizons)
-  Table A1  tableA1_full_relmse      relative MSE, all 9 models x 18 cells
-  Table A2  tableA2_mcs              MCS inclusion per (stock, info-set, horizon)
-  Table A3  tableA3_regime           regime-split relative MSE (LaTeX of Stage 11 CSVs)
-
-DM stars (one-sided, HLN-corrected, model beats HAR): * p<0.10  ** p<0.05  *** p<0.01.
-HAR-X is omitted from M_HAR (HAR-X = HAR there); those cells show no bar / "$-$".
-All figures: colourblind-safe palette, sans-serif, no chart junk. Captions in
-results/figures/captions.md.
-"""
+"""Generate the report figures and tables from the results CSVs."""
 from __future__ import annotations
 
 import logging
@@ -57,7 +39,7 @@ COL_MALL = "#E69F00"   # orange
 COL_VI = "#0072B2"
 Y_CAP = 2.0
 
-# MCS cells corrupted by RF/GB heavy-tailed losses (Stage 10/11 finding).
+# MCS cells corrupted by RF/GB heavy-tailed losses at the longer horizons.
 MCS_CORRUPT = {(22, "JPM", "M_ALL"), (22, "AAPL", "M_HAR"),
                (5, "AAPL", "M_HAR"), (5, "AAPL", "M_ALL")}
 MCS_BORDERLINE = {(5, "AMZN", "M_HAR")}
@@ -105,11 +87,7 @@ def stars(p: float | None) -> str:
 
 def _relmse_panels(horizons: list[int], hatch_map: dict, save_stem: str,
                     fig_w: float) -> None:
-    """Grouped relative-MSE bar chart, one panel per stock, for the given horizons.
-
-    Bars within a model group: colour = info-set, hatch = horizon. HAR-X (M_ALL
-    only) bars are re-centred within the group so the slot does not read as
-    missing data. Three-tier DM stars (* 10% ** 5% *** 1%, beats HAR)."""
+    """Grouped relative-MSE bar chart, one panel per stock, for the given horizons."""
     summaries = {h: load_summary(h) for h in horizons}
     combos = [(h, iset) for h in horizons for iset in INFOSETS]
     n_combo = len(combos)
@@ -169,12 +147,7 @@ def figure1() -> None:
 
 
 def figureA2() -> None:
-    """Relative-MSE small multiples: rows = stocks, columns = horizons.
-
-    3x3 grid avoids the 6-bars-per-group crowding: each subplot carries only the
-    5 models x 2 info-set bars (no hatch — horizon is the column). Stars and
-    capped-bar value labels sit at each bar's own x-position, so they no longer
-    collide."""
+    """Relative-MSE small multiples: rows = stocks, columns = horizons."""
     summaries = {h: load_summary(h) for h in HORIZONS_ALL}
     hlabel = {1: "$h$ = 1  (1-day)", 5: "$h$ = 5  (1-week)",
               22: "$h$ = 22  (1-month)"}
@@ -403,10 +376,10 @@ def tableA2() -> None:
     log.info("wrote tableA2_mcs.{csv,tex}")
 
 
-# ---------- Table A3: regime split (LaTeX of Stage 11 CSVs) ----------
+# ---------- Table A3: regime split (LaTeX of the regime-split CSVs) ----------
 
 def tableA3() -> None:
-    """LaTeX of the Stage 11 regime-split CSVs; VIX tercile ranges in column headers."""
+    """LaTeX of the regime-split CSVs; VIX tercile ranges in column headers."""
     lines = [r"% Table A3: regime-split relative MSE vs HAR (M_ALL).",
              r"% Test set split into VIX terciles. Rel MSE < 1 = beats HAR."]
     for h in HORIZONS_ALL:

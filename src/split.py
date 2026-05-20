@@ -1,17 +1,4 @@
-"""src/split.py: Stage 5. Chronological 70/10/20 split plus training-set standardisation.
-
-In-memory only; no disk writes. Stage 6+ imports `split_stock` or `split_all_stocks`
-to get the splits, raw features (for HAR family), and standardised features
-(for ML models).
-
-Key decisions baked in:
-  - Chronological split, no shuffling (time series).
-  - Standardisation uses TRAINING-SET mean/std only, never validation or test.
-    Implemented with ddof=0 to match sklearn StandardScaler convention exactly.
-  - All 12 predictors are kept in X (including RQ_lag, which only HARQ uses).
-    Per-model column subsetting happens at model-fit time in Stage 6+.
-  - RV (target) is NOT standardised; models predict raw RV per the paper.
-"""
+"""Chronological 70/10/20 train/validation/test split with training-set standardisation."""
 
 from __future__ import annotations
 
@@ -36,13 +23,7 @@ VAL_FRAC = 0.10
 
 @dataclass
 class StockSplit:
-    """One stock's chronological train/val/test split + training-set scaler.
-
-    Raw X_*: feature DataFrames indexed by date, with all 12 predictor columns.
-    y_*: raw RV target Series, indexed by date.
-    train_mean / train_std: per-column scaler params from the training set only.
-    X_*_std: standardised feature DataFrames using the training-set scaler.
-    """
+    """One stock's chronological train/validation/test split and training-set scaler."""
     ticker: str
     X_train: pd.DataFrame
     y_train: pd.Series
@@ -116,7 +97,7 @@ def split_all_stocks() -> dict[str, StockSplit]:
 
 
 def _print_diagnostic(sp: StockSplit) -> None:
-    """Print the per-stock diagnostic block for Stage 5 inspection."""
+    """Print the per-stock split diagnostic block."""
     print("=" * 96)
     print(f"  {sp.ticker}")
     print("=" * 96)

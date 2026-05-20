@@ -1,78 +1,106 @@
-# Volatility Forecasting Replication
+# Realized Volatility Forecasting: HAR Models vs Machine Learning
 
-Replication of Christensen, Siggaard and Veliyev (2023, *Journal of Financial
-Econometrics*), "A Machine Learning Approach to Volatility Forecasting", applied
-to AAPL, JPM, and AMZN over 2016 to 2024.
+## Overview
 
-The deliverable is a 3-page report plus appendix. This repository contains the
-data pipeline, model fits, and statistical inference code.
+This project replicates the methodology of Christensen, Siggaard & Veliyev
+(2023) to test whether machine learning models outperform the HAR family at
+forecasting the realized variance of large-cap US equities. It covers three
+stocks (Apple, JPMorgan, Amazon) over 2016-2024 using 1-minute price data, and
+evaluates nine forecasting models across two predictor sets and three horizons
+(1 day, 1 week, 1 month). Forecasts are compared with the Diebold-Mariano test
+and the Model Confidence Set, and predictor influence is quantified with
+Accumulated Local Effects.
 
-## Models
+## Key Findings
 
-Nine models, two information sets, three stocks, one-day forecast horizon.
+- **The log-HAR model is the most reliable forecaster.** LogHAR beats the HAR
+  baseline for Apple and JPMorgan at every horizon, cutting JPMorgan's one-month
+  MSE by 47% (relative MSE 0.53), and is retained in the Model Confidence Set in
+  11 of 12 main-horizon cells. It is weaker only on Amazon, the one stock outside
+  the original study's sample.
+- **Tree ensembles collapse at long horizons.** Random forest and gradient
+  boosting are competitive at the one-day horizon (relative MSE near 1.0) but
+  deteriorate sharply at one month: gradient boosting on the full predictor set
+  reaches 4.0x, 3.4x, and 11.9x the HAR baseline MSE for Apple, Amazon, and
+  JPMorgan.
+- **The "gains grow with horizon" result does not replicate.** The original
+  paper finds the ML advantage widens as the horizon lengthens. Here every
+  flexible model except LogHAR gets worse from one day to one month; the
+  neural-net ensemble for JPMorgan moves from 0.84 to 1.51 relative MSE.
+- **Extra predictors help linear models, not trees.** Adding eight macro and
+  firm-level covariates improves LogHAR and Lasso but destabilises trees. A
+  VIX-tercile split shows the tree deterioration concentrates in the calm and
+  stressed extremes: random forest reaches 6.9x HAR in JPMorgan's low-volatility
+  regime at the one-month horizon.
 
-| Family             | Models                              |
-|--------------------|-------------------------------------|
-| HAR family         | HAR, HAR-X, LogHAR, HARQ            |
-| Regularised linear | Lasso, Elastic Net                  |
-| Trees              | Random Forest, Gradient Boosting    |
-| Neural net         | NN_2 with 10-net ensemble of 100    |
+## Methodology
 
-Plus a naive random-walk benchmark. M_HAR contains daily, weekly, and monthly
-RV lags. M_ALL adds 8 covariates: 1-week momentum, log dollar volume change,
-earnings-announcement dummy, VIX, Hang Seng squared log return, ADS business
-conditions index, 3-month T-bill change, and the EPU index.
+Daily realized variance and quarticity are built from 78 five-minute returns per
+session, with a previous-tick interpolation rule for missing minutes. Two
+predictor sets are used: the three HAR lags alone (M_HAR), and those lags plus
+eight covariates (momentum, dollar volume, an earnings dummy, VIX, the 3-month
+T-bill rate, Hang Seng return, the ADS business-conditions index, and economic
+policy uncertainty). HAR-family, linear, and tree models use rolling-window
+refits; the neural-net ensemble uses a fixed window and averages the best 10 of
+100 random seeds. At multi-step horizons the training window is lagged by h-1
+days to remove look-ahead. Inference uses the Diebold-Mariano test with the
+Harvey-Leybourne-Newbold small-sample correction and a 10,000-replication
+stationary-bootstrap Model Confidence Set.
 
-## Directory layout
+## Repository Structure
 
 ```
-data/
-  raw/        1-min OHLCV files (gitignored)
-  interim/    daily RV, RQ, stock-specific covariates
-  external/   daily macro series (VIX, HSI, US3M, ADS, EPU)
-  final/      per-stock master DataFrames
-results/
-  predictions/  one CSV per (stock, infoset, model, horizon) (gitignored)
-  figures/      final figures for the report
-  logs/         dropped-days log, fill log (gitignored)
 src/
-  build_rv.py            Stage 1: daily RV and RQ from 1-min bars
-  fetch_macro.py         Stage 2: macro series from FRED, Philly Fed, EPU
-  build_predictors.py    Stage 3: stock-specific predictors
-  merge_master.py        Stage 4: assemble per-stock master DF
-  split.py               Stage 5: train/val/test split, standardisation
-  models/
-    har_family.py        Stage 6: HAR, HAR-X, LogHAR, HARQ
-    ml_models.py         Stage 7: Lasso, EN, RF, GB, NN_2
+  build_rv.py              realized variance and quarticity from 1-min bars
+  fetch_macro.py           macro covariate downloads
+  build_predictors.py      stock-specific predictors
+  merge_master.py          per-stock merged model inputs
+  split.py                 chronological train/validation/test split
+  horizons.py              multi-step target construction
+  models/har_family.py     HAR, HAR-X, LogHAR, HARQ
+  models/ml_models.py      Lasso, ElasticNet, random forest, GB, neural net
+  inference/statistical_inference.py  relative MSE, DM test, MCS
+  inference/ale.py         Accumulated Local Effects variable importance
+  inference/regime_split.py  VIX-regime MSE breakdown
+  make_figures.py          report figures and tables
+data/                      raw, interim, external, and final model inputs
+results/                   predictions, tables, and figures
 ```
 
-## Reproduce
+## Reproduction
+
+Place 1-minute OHLCV files in `data/raw/` as `<TICKER>.txt`, install
+dependencies with `pip install -r requirements.txt`, then run the pipeline:
 
 ```
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
 python src/build_rv.py
 python src/fetch_macro.py
 python src/build_predictors.py
 python src/merge_master.py
 python src/models/har_family.py
-python src/models/ml_models.py    # approximately 4 hours
+python src/models/ml_models.py
+python src/inference/statistical_inference.py
+python src/inference/ale.py
+python src/inference/regime_split.py
+python src/make_figures.py
 ```
 
-Each stage reads from `data/` and writes to `data/` or `results/`. Stages can
-be re-run independently once their inputs exist. Stages 8 to 13 (Diebold-Mariano
-tests, Model Confidence Set, Accumulated Local Effects, figures, report writing)
-are pending.
+Multi-step horizons take a horizon argument, for example
+`python src/models/ml_models.py 22`. All randomness is seeded and intermediate
+artifacts are written to `data/` and `results/`, so each stage can be re-run
+independently.
 
-## Known deviations from the paper
+## References
 
-- Three stocks (AAPL, JPM, AMZN) rather than 29 DJIA constituents.
-- Sample window is 2016 to 2024 rather than 2001 to 2017.
-- IV is dropped from M_ALL. The paper uses firm-specific OptionMetrics implied
-  volatility; we have no equivalent source. VIX is kept separately.
-- Test set is roughly half the size of the paper's, which reduces statistical
-  power for the DM test and Model Confidence Set.
-- AMZN was added to the DJIA in 2024 and is not in the paper's sample. It is
-  included here because we have the data.
+Christensen, K., Siggaard, M., & Veliyev, B. (2023). A Machine Learning Approach
+to Volatility Forecasting. *Journal of Financial Econometrics*, 21(5), 1680-1727.
+
+Corsi, F. (2009). A Simple Approximate Long-Memory Model of Realized Volatility.
+*Journal of Financial Econometrics*, 7(2), 174-196.
+
+Bollerslev, T., Patton, A. J., & Quaedvlieg, R. (2016). Exploiting the Errors: A
+Simple Approach for Improved Volatility Forecasting. *Journal of Econometrics*,
+192(1), 1-18.
+
+Diebold, F. X., & Mariano, R. S. (1995). Comparing Predictive Accuracy. *Journal
+of Business & Economic Statistics*, 13(3), 253-263.

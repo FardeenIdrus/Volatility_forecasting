@@ -1,21 +1,4 @@
-"""src/inference/run_stage8.py: Stage 8. Statistical inference on 1-day predictions.
-
-For each (stock × info-set) combination:
-  1. Relative MSE vs HAR baseline.
-  2. Pairwise Diebold-Mariano test with Harvey-Leybourne-Newbold small-sample
-     correction. One-sided alternative H1: MSE_i > MSE_j (model i is worse).
-  3. Model Confidence Set at 90% confidence using arch.bootstrap.MCS, stationary
-     bootstrap, 10,000 replications, squared-error loss.
-
-Reads results/predictions/<ticker>_<infoset>_<model>_h1.csv.
-Writes:
-  results/tables/summary.csv          long: ticker, info_set, model, n_test, mse, rel_mse_to_HAR
-  results/tables/mcs_inclusion.csv    long: ticker, info_set, model, in_mcs, mcs_pvalue
-  results/tables/mse_<infoset>.csv          wide pivot (rows=model, cols=ticker)
-  results/tables/relative_mse_<infoset>.csv  same but relative-to-HAR
-  results/tables/dm_<ticker>_<infoset>_stat.csv     pairwise DM stat matrix
-  results/tables/dm_<ticker>_<infoset>_pvalue.csv   pairwise one-sided p-value matrix
-"""
+"""Statistical inference on model forecasts: relative MSE, Diebold-Mariano tests, and the Model Confidence Set."""
 
 from __future__ import annotations
 
@@ -29,7 +12,7 @@ from arch.bootstrap import MCS
 from scipy import stats
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-log = logging.getLogger("stage8")
+log = logging.getLogger("inference")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PREDICTIONS_DIR = PROJECT_ROOT / "results" / "predictions"
@@ -37,7 +20,7 @@ TABLES_DIR = PROJECT_ROOT / "results" / "tables"
 
 TICKERS = ["AAPL", "JPM", "AMZN"]
 INFOSETS = ["M_HAR", "M_ALL"]
-HORIZON = 1  # overridden via CLI: `python src/inference/run_stage8.py 22`
+HORIZON = 1  # overridden via CLI: `python src/inference/statistical_inference.py 22`
 # DM Newey-West HAC bandwidth = HORIZON - 1; HLN small-sample multiplier uses HORIZON.
 
 # Model ordering for tables: HAR family first, then ML
@@ -78,15 +61,7 @@ def collect_losses(ticker: str, info_set: str) -> pd.DataFrame:
 
 
 def dm_test_hln(loss_i: pd.Series, loss_j: pd.Series, h: int = 1) -> tuple[float, float]:
-    """Diebold-Mariano test with Harvey-Leybourne-Newbold small-sample correction.
-
-    H0: E[loss_i - loss_j] = 0
-    H1: E[loss_i - loss_j] > 0   (one-sided; model i has higher loss = worse)
-
-    Newey-West HAC variance with Bartlett kernel, bandwidth h-1.
-    HLN multiplier: sqrt((T + 1 - 2h + h(h-1)/T) / T).
-    p-value under t_{T-1}.
-    """
+    """Diebold-Mariano test (one-sided H1: loss_i > loss_j) with the Harvey-Leybourne-Newbold correction."""
     d = (loss_i - loss_j).dropna().to_numpy()
     T = len(d)
     if T == 0:
@@ -108,11 +83,7 @@ def dm_test_hln(loss_i: pd.Series, loss_j: pd.Series, h: int = 1) -> tuple[float
 
 
 def compute_pairwise_dm(losses: pd.DataFrame, h: int = 1) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Pairwise DM stat and one-sided p-value matrices.
-
-    Cell [i, j] is the test of H1: model_i has higher MSE than model_j.
-    Diagonal cells are set to (0, 1) by convention.
-    """
+    """Pairwise DM stat and one-sided p-value matrices; cell [i, j] tests H1: MSE_i > MSE_j."""
     models = list(losses.columns)
     stat = pd.DataFrame(np.nan, index=models, columns=models, dtype=float)
     pval = pd.DataFrame(np.nan, index=models, columns=models, dtype=float)
@@ -151,12 +122,8 @@ def run_mcs(losses: pd.DataFrame) -> pd.DataFrame:
 
 
 def main(argv: list[str] | None = None) -> None:
-    """Run Stage 8 inference: relative MSE, pairwise DM, and MCS for all cells.
-
-    CLI:
-      python src/inference/run_stage8.py        # h=1 (default)
-      python src/inference/run_stage8.py 22     # h=22 (paper §4 monthly horizon)
-    """
+    """Run inference (relative MSE, pairwise DM, MCS) for every stock and info-set."""
+    # CLI: python src/inference/statistical_inference.py [h]   (h defaults to 1).
     global HORIZON
     args = argv if argv is not None else sys.argv[1:]
     if args:

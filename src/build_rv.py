@@ -1,27 +1,4 @@
-"""src/build_rv.py: Stage 1. Daily realized variance and quarticity from 1-min OHLCV bars.
-
-For each ticker in TICKERS this script:
-  1. Loads data/raw/<TICKER>.txt and parses MM/DD/YYYY + HH:MM into a DatetimeIndex.
-  2. Restricts each day to the regular NYSE session 09:30 to 15:59 inclusive.
-  3. Applies the bar-count + forward-fill policy:
-       - drops days with fewer than MIN_BARS_PER_DAY bars (genuine half-days / halts),
-       - reindexes the remaining days to the full 390-minute grid and forward-fills
-         missing 1-min bars via previous-tick interpolation (BNHLS 2009),
-       - back-fills only if the leading 09:30 bar itself is missing.
-  4. Constructs 78 intraday 5-min log returns per day (see _five_min_returns_from_closes).
-  5. Computes RV_t = sum of squared 5-min returns.
-  6. Computes RQ_t = (n/3) * sum of (5-min return)^4 with n = 78.
-  7. Writes data/interim/rv_<TICKER>.csv with columns: date, RV, RQ.
-
-Output is in raw, dimensionless variance units. Any display rescaling (annualised
-percent-vol = sqrt(RV * 252) * 100) happens downstream in plot/report code, never here.
-
-Side-effects (per ticker):
-  - Appends dropped-day rows (ticker, date, n_bars) to results/logs/dropped_days.csv.
-  - Appends filled-minute rows (ticker, date, n_filled) to results/logs/filled_minutes.csv.
-  - Replaces any pre-existing rows for the same ticker in those log files, so re-runs
-    overwrite cleanly.
-"""
+"""Daily realized variance and quarticity from 1-minute OHLCV bars."""
 
 from __future__ import annotations
 
@@ -74,13 +51,10 @@ def filter_session(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _five_min_returns_from_closes(closes: np.ndarray) -> np.ndarray:
-    """Given a full 390-element close vector (no NaN), return 78 5-min log returns.
-
-    Sampling indices = [0, 4, 9, 14, ..., 389], giving 79 prices. 78 consecutive log
-    differences are returned. First return spans 09:30:59 -> 09:34:59 (a 4-minute
-    return; anchored on the 09:30 bar's close).
-    """
+    """Convert a full 390-element close vector to 78 intraday 5-minute log returns."""
     assert closes.shape == (EXPECTED_BARS_PER_DAY,), f"expected {EXPECTED_BARS_PER_DAY} closes"
+    # Sample the 09:30 close, then every 5th bar: 79 prices give 78 returns. The first
+    # return spans only 4 minutes because it is anchored on the 09:30 bar's close.
     sample_idx = np.concatenate((
         [0],
         np.arange(BARS_PER_5MIN - 1, EXPECTED_BARS_PER_DAY, BARS_PER_5MIN),
@@ -90,14 +64,7 @@ def _five_min_returns_from_closes(closes: np.ndarray) -> np.ndarray:
 
 
 def compute_day_rv_rq(day_df: pd.DataFrame, day_normalized: pd.Timestamp) -> tuple[float, float, int]:
-    """Process one trading day: reindex to full 390-minute grid, forward-fill any
-    missing 1-min bars, and compute (RV, RQ, n_filled_minutes).
-
-    Forward-fill (previous-tick interpolation) is the standard TAQ-cleaning rule
-    from Barndorff-Nielsen, Hansen, Lunde & Shephard (2009), which the paper §2
-    explicitly cites as its cleaning reference. Filled minutes contribute zero
-    1-min returns, which is the no-trade ≡ no-price-change assumption.
-    """
+    """Reindex one trading day to the 390-minute grid, forward-fill gaps, return (RV, RQ, n_filled)."""
     expected_index = pd.date_range(
         start=day_normalized + pd.Timedelta(hours=9, minutes=30),
         end=day_normalized + pd.Timedelta(hours=15, minutes=59),
@@ -105,6 +72,8 @@ def compute_day_rv_rq(day_df: pd.DataFrame, day_normalized: pd.Timestamp) -> tup
     )
     close = day_df["close"].reindex(expected_index)
     n_filled = int(close.isna().sum())
+    # Previous-tick interpolation (Barndorff-Nielsen, Hansen, Lunde & Shephard 2009):
+    # a filled minute contributes a zero 1-min return.
     close = close.ffill()
     if pd.isna(close.iloc[0]):
         close = close.bfill()
