@@ -16,7 +16,13 @@ log = logging.getLogger("make_figures")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TABLES_DIR = PROJECT_ROOT / "results" / "tables"
+TABLES_MAIN = TABLES_DIR / "main"
+TABLES_APPENDIX = TABLES_DIR / "appendix"
+TABLES_REGIME = TABLES_DIR / "regime"
+TABLES_DIAG = TABLES_DIR / "diagnostics"
 FIGURES_DIR = PROJECT_ROOT / "results" / "figures"
+FIGURES_MAIN = FIGURES_DIR / "main"
+FIGURES_APPENDIX = FIGURES_DIR / "appendix"
 FINAL_DIR = PROJECT_ROOT / "data" / "final"
 
 TICKERS = ["AAPL", "JPM", "AMZN"]
@@ -60,7 +66,7 @@ plt.rcParams.update({
 # ---------- data access ----------
 
 def load_summary(h: int) -> pd.DataFrame:
-    return pd.read_csv(TABLES_DIR / f"summary_h{h}.csv")
+    return pd.read_csv(TABLES_DIAG / f"summary_h{h}.csv")
 
 
 def rel_mse(summary: pd.DataFrame, ticker: str, infoset: str, model: str):
@@ -71,7 +77,7 @@ def rel_mse(summary: pd.DataFrame, ticker: str, infoset: str, model: str):
 
 def dm_p_beats_har(ticker: str, infoset: str, h: int, model: str):
     """One-sided DM p-value that `model` beats HAR (cell [HAR, model])."""
-    pv = pd.read_csv(TABLES_DIR / f"dm_{ticker}_{infoset}_h{h}_pvalue.csv", index_col=0)
+    pv = pd.read_csv(TABLES_APPENDIX / f"dm_{ticker}_{infoset}_h{h}_pvalue.csv", index_col=0)
     if "HAR" not in pv.index or model not in pv.columns:
         return None
     return float(pv.loc["HAR", model])
@@ -137,7 +143,7 @@ def _relmse_panels(horizons: list[int], hatch_map: dict, save_stem: str,
              ha="center", fontsize=7, color="0.35")
     fig.tight_layout(rect=[0, 0, 1, 0.95])
     for ext in ("png", "pdf"):
-        fig.savefig(FIGURES_DIR / f"{save_stem}.{ext}", dpi=300, bbox_inches="tight")
+        fig.savefig(FIGURES_MAIN / f"{save_stem}.{ext}", dpi=300, bbox_inches="tight")
     plt.close(fig)
     log.info("wrote %s.{png,pdf}", save_stem)
 
@@ -200,7 +206,7 @@ def figureA2() -> None:
              ha="center", fontsize=7, color="0.35")
     fig.tight_layout(rect=[0, 0, 1, 0.97])
     for ext in ("png", "pdf"):
-        fig.savefig(FIGURES_DIR / f"figA2_relative_mse_3h.{ext}", dpi=300,
+        fig.savefig(FIGURES_APPENDIX / f"figA2_relative_mse_3h.{ext}", dpi=300,
                     bbox_inches="tight")
     plt.close(fig)
     log.info("wrote figA2_relative_mse_3h.{png,pdf}")
@@ -218,7 +224,7 @@ def _cell(summary, ticker, infoset, h, model) -> str:
 
 
 def _relmse_table(models: list[int], horizons: list[int], stem: str,
-                  caption_id: str, sideways: bool = False) -> pd.DataFrame:
+                  caption_id: str, dest: Path, sideways: bool = False) -> pd.DataFrame:
     summaries = {h: load_summary(h) for h in horizons}
     col_keys = [(t, i, h) for t in TICKERS for i in INFOSETS for h in horizons]
     df = pd.DataFrame(index=[DISPLAY_TXT[m] for m in models],
@@ -227,7 +233,7 @@ def _relmse_table(models: list[int], horizons: list[int], stem: str,
         for (t, i, h) in col_keys:
             df.loc[DISPLAY_TXT[m], f"{t}_{i}_h{h}"] = _cell(summaries[h], t, i, h, m)
     df.index.name = "model"
-    df.to_csv(TABLES_DIR / f"{stem}.csv")
+    df.to_csv(dest / f"{stem}.csv")
 
     nh = len(horizons)
     colspec = "l " + " ".join(["r" * nh] * (3 * len(INFOSETS)))
@@ -259,18 +265,18 @@ def _relmse_table(models: list[int], horizons: list[int], stem: str,
                   r"  \footnotesize",
                   r"  % \caption{...}  \label{...}  -- caption in results/figures/captions.md"]
                  + lines + [r"\end{sidewaystable}"])
-    (TABLES_DIR / f"{stem}.tex").write_text("\n".join(lines) + "\n")
+    (dest / f"{stem}.tex").write_text("\n".join(lines) + "\n")
     log.info("wrote %s.{csv,tex}", stem)
     return df
 
 
 def table1() -> pd.DataFrame:
-    return _relmse_table(MODELS5, HORIZONS_MAIN, "table1_main", "Table 1")
+    return _relmse_table(MODELS5, HORIZONS_MAIN, "table1_main", "Table 1", TABLES_MAIN)
 
 
 def tableA1() -> pd.DataFrame:
     return _relmse_table(MODELS9, HORIZONS_ALL, "tableA1_full_relmse", "Table A1",
-                         sideways=True)
+                         TABLES_APPENDIX, sideways=True)
 
 
 # ---------- Figure 2: ALE-based variable importance ----------
@@ -282,7 +288,7 @@ def figure2() -> None:
     for ri, ticker in enumerate(TICKERS):
         for ci, model in enumerate(models):
             ax = axes[ri, ci]
-            vi = pd.read_csv(TABLES_DIR / f"vi_{ticker}_{model}.csv")
+            vi = pd.read_csv(TABLES_APPENDIX / f"vi_{ticker}_{model}.csv")
             vi = vi.sort_values("vi_norm")  # ascending → largest at top of barh
             labels = [FEATURE_DISPLAY.get(f, f) for f in vi["feature"]]
             ax.barh(labels, vi["vi_norm"], color=COL_VI, edgecolor="white",
@@ -296,7 +302,7 @@ def figure2() -> None:
                 ax.set_xlabel("Variable importance (normalised, sums to 1)")
     fig.tight_layout()
     for ext in ("png", "pdf"):
-        fig.savefig(FIGURES_DIR / f"fig2_vi.{ext}", dpi=300, bbox_inches="tight")
+        fig.savefig(FIGURES_MAIN / f"fig2_vi.{ext}", dpi=300, bbox_inches="tight")
     plt.close(fig)
     log.info("wrote fig2_vi.{png,pdf}")
 
@@ -323,7 +329,7 @@ def figureA1() -> None:
     axes[-1].set_xlabel("Date")
     fig.tight_layout()
     for ext in ("png", "pdf"):
-        fig.savefig(FIGURES_DIR / f"figA1_rv_series.{ext}", dpi=300, bbox_inches="tight")
+        fig.savefig(FIGURES_APPENDIX / f"figA1_rv_series.{ext}", dpi=300, bbox_inches="tight")
     plt.close(fig)
     log.info("wrote figA1_rv_series.{png,pdf}")
 
@@ -334,7 +340,7 @@ def tableA2() -> None:
     """MCS inclusion (Y/N) per (stock, info-set, horizon); corrupted cells flagged."""
     long_rows = []
     for h in HORIZONS_ALL:
-        mcs = pd.read_csv(TABLES_DIR / f"mcs_inclusion_h{h}.csv")
+        mcs = pd.read_csv(TABLES_APPENDIX / f"mcs_inclusion_h{h}.csv")
         for _, r in mcs.iterrows():
             key = (h, r["ticker"], r["info_set"])
             flag = ("corrupt" if key in MCS_CORRUPT
@@ -345,7 +351,7 @@ def tableA2() -> None:
                               "mcs_pvalue": float(r["mcs_pvalue"]),
                               "mcs_reliability": flag})
     long = pd.DataFrame(long_rows)
-    long.to_csv(TABLES_DIR / "tableA2_mcs.csv", index=False)
+    long.to_csv(TABLES_APPENDIX / "tableA2_mcs.csv", index=False)
 
     lines = [r"% Table A2: MCS inclusion at 90%. Y = retained, N = eliminated.",
              r"% dagger = MCS unreliable (RF/GB heavy-tailed losses inflate the",
@@ -372,7 +378,7 @@ def tableA2() -> None:
         lines += [r"\bottomrule", r"\end{tabular}", r"\vspace{1em}", ""]
     lines += [r"% $^\dagger$ MCS unreliable in this cell (heavy-tailed RF/GB losses).",
               r"% $^\ddagger$ borderline; treat with caution."]
-    (TABLES_DIR / "tableA2_mcs.tex").write_text("\n".join(lines) + "\n")
+    (TABLES_APPENDIX / "tableA2_mcs.tex").write_text("\n".join(lines) + "\n")
     log.info("wrote tableA2_mcs.{csv,tex}")
 
 
@@ -383,7 +389,7 @@ def tableA3() -> None:
     lines = [r"% Table A3: regime-split relative MSE vs HAR (M_ALL).",
              r"% Test set split into VIX terciles. Rel MSE < 1 = beats HAR."]
     for h in HORIZONS_ALL:
-        df = pd.read_csv(TABLES_DIR / f"regime_split_h{h}.csv")
+        df = pd.read_csv(TABLES_REGIME / f"regime_split_h{h}.csv")
         # representative VIX ranges (market-wide VIX → ~common across stocks)
         rng = {}
         for reg in ["low", "mid", "high"]:
@@ -410,7 +416,7 @@ def tableA3() -> None:
             if ti < 2:
                 lines.append(r"\addlinespace")
         lines += [r"\bottomrule", r"\end{tabular}", r"\vspace{1em}", ""]
-    (TABLES_DIR / "tableA3_regime.tex").write_text("\n".join(lines) + "\n")
+    (TABLES_REGIME / "tableA3_regime.tex").write_text("\n".join(lines) + "\n")
     log.info("wrote tableA3_regime.tex")
 
 
@@ -492,8 +498,9 @@ regime-extension claim.
 
 
 def main() -> None:
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    TABLES_DIR.mkdir(parents=True, exist_ok=True)
+    for d in (FIGURES_MAIN, FIGURES_APPENDIX,
+              TABLES_MAIN, TABLES_APPENDIX, TABLES_REGIME, TABLES_DIAG):
+        d.mkdir(parents=True, exist_ok=True)
     figure1()
     t1 = table1()
     figure2()

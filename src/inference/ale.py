@@ -27,7 +27,9 @@ tf.get_logger().setLevel("ERROR")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 FIGURES_DIR = PROJECT_ROOT / "results" / "figures"
+FIGURES_APPENDIX = FIGURES_DIR / "appendix"
 TABLES_DIR = PROJECT_ROOT / "results" / "tables"
+TABLES_APPENDIX = TABLES_DIR / "appendix"
 # Top-10 NN seeds are parsed from the most recent h=1 NN run log written by
 # ml_models.py (after the NN y-standardisation fix); see stage7_h1_nn.log.
 NN_SEED_LOG = PROJECT_ROOT / "results" / "logs" / "stage7_h1_nn.log"
@@ -170,11 +172,11 @@ def save_tables(ale_results, vi_norm, feature_names, ticker, model_name):
             rows.append({"feature": name, "edge_idx": i,
                          "z_std": float(e), "ale_centred": float(a)})
     pd.DataFrame(rows).to_csv(
-        TABLES_DIR / f"ale_{ticker}_{model_name}.csv", index=False,
+        TABLES_APPENDIX / f"ale_{ticker}_{model_name}.csv", index=False,
     )
     pd.DataFrame([{"feature": n, "vi_norm": float(v)}
                   for n, v in zip(feature_names, vi_norm)]).to_csv(
-        TABLES_DIR / f"vi_{ticker}_{model_name}.csv", index=False,
+        TABLES_APPENDIX / f"vi_{ticker}_{model_name}.csv", index=False,
     )
 
 
@@ -195,9 +197,9 @@ def run_for_stock(sp, top_seeds: list[int], ticker: str,
         rf.fit(X_train_std, y_train_arr)
         rf_results, rf_vi = compute_all_features(rf.predict, X_train_std, cols)
         plot_ale_curves(rf_results, rf_vi, cols, ticker, "RF",
-                        FIGURES_DIR / f"ale_{ticker}_RF.png")
+                        FIGURES_APPENDIX / f"ale_{ticker}_RF.png")
         plot_vi_bar(rf_vi, cols, ticker, "RF",
-                    FIGURES_DIR / f"vi_{ticker}_RF.png")
+                    FIGURES_APPENDIX / f"vi_{ticker}_RF.png")
         save_tables(rf_results, rf_vi, cols, ticker, "RF")
         log.info("  RF VI sorted: %s",
                  sorted(zip(cols, rf_vi.tolist()), key=lambda x: -x[1]))
@@ -223,9 +225,9 @@ def run_for_stock(sp, top_seeds: list[int], ticker: str,
 
         nn_results, nn_vi = compute_all_features(nn_predict, X_train_std, cols)
         plot_ale_curves(nn_results, nn_vi, cols, ticker, "NN_2_e10",
-                        FIGURES_DIR / f"ale_{ticker}_NN_2_e10.png")
+                        FIGURES_APPENDIX / f"ale_{ticker}_NN_2_e10.png")
         plot_vi_bar(nn_vi, cols, ticker, "NN_2_e10",
-                    FIGURES_DIR / f"vi_{ticker}_NN_2_e10.png")
+                    FIGURES_APPENDIX / f"vi_{ticker}_NN_2_e10.png")
         save_tables(nn_results, nn_vi, cols, ticker, "NN_2_e10")
         log.info("  NN VI sorted: %s",
                  sorted(zip(cols, nn_vi.tolist()), key=lambda x: -x[1]))
@@ -235,8 +237,8 @@ def main(argv: list[str] | None = None) -> None:
     """Compute ALE variable importance for the requested tickers and models."""
     # CLI: python src/inference/ale.py [TICKER ...] [MODEL ...]  (args mix freely;
     #   defaults to all 3 stocks and both models).
-    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
-    TABLES_DIR.mkdir(parents=True, exist_ok=True)
+    FIGURES_APPENDIX.mkdir(parents=True, exist_ok=True)
+    TABLES_APPENDIX.mkdir(parents=True, exist_ok=True)
     np.random.seed(42); random.seed(42); tf.random.set_seed(42)
 
     args = argv if argv is not None else sys.argv[1:]

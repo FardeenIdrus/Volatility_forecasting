@@ -159,7 +159,7 @@ def run_one(ticker: str, info_set: str, spec: ModelSpec, master: pd.DataFrame,
     actual = master["y_target"].iloc[test_start_idx:]
     mse = float(((preds - actual) ** 2).mean())
 
-    out_path = PREDICTIONS_DIR / f"{ticker}_{info_set}_{spec.name}_h{h}.csv"
+    out_path = PREDICTIONS_DIR / f"h{h}" / f"{ticker}_{info_set}_{spec.name}_h{h}.csv"
     pd.DataFrame({"actual": actual, "predicted": preds}).to_csv(out_path)
 
     return {
@@ -187,7 +187,7 @@ def main(argv: list[str] | None = None) -> None:
     h = int(args[0]) if args else 1
     log.info("HORIZON h=%d", h)
 
-    PREDICTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    (PREDICTIONS_DIR / f"h{h}").mkdir(parents=True, exist_ok=True)
     splits = split_all_stocks()
 
     all_results = []

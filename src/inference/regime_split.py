@@ -13,6 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PREDICTIONS_DIR = PROJECT_ROOT / "results" / "predictions"
 FINAL_DIR = PROJECT_ROOT / "data" / "final"
 TABLES_DIR = PROJECT_ROOT / "results" / "tables"
+TABLES_REGIME = TABLES_DIR / "regime"
 
 TICKERS = ["AAPL", "JPM", "AMZN"]
 HORIZONS = [1, 5, 22]
@@ -25,7 +26,7 @@ REGIME_LABELS = ["low", "mid", "high"]
 
 def load_loss(ticker: str, model: str, h: int) -> pd.Series:
     """Per-day squared-error loss Series for one (ticker, M_ALL, model, h) cell."""
-    path = PREDICTIONS_DIR / f"{ticker}_{INFO_SET}_{model}_h{h}.csv"
+    path = PREDICTIONS_DIR / f"h{h}" / f"{ticker}_{INFO_SET}_{model}_h{h}.csv"
     df = pd.read_csv(path, parse_dates=["date"], index_col="date")
     return ((df["actual"] - df["predicted"]) ** 2).rename(model)
 
@@ -111,11 +112,11 @@ def flip_analysis(tables: dict[int, pd.DataFrame]) -> None:
 
 def main() -> None:
     """Run the regime split for all three horizons; write one CSV each; print diagnostics."""
-    TABLES_DIR.mkdir(parents=True, exist_ok=True)
+    TABLES_REGIME.mkdir(parents=True, exist_ok=True)
     tables = {}
     for h in HORIZONS:
         df = run_horizon(h)
-        out = TABLES_DIR / f"regime_split_h{h}.csv"
+        out = TABLES_REGIME / f"regime_split_h{h}.csv"
         df.to_csv(out, index=False)
         log.info("wrote %s  rows=%d", out.name, len(df))
         tables[h] = df

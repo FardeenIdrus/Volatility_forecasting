@@ -17,6 +17,8 @@ log = logging.getLogger("inference")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PREDICTIONS_DIR = PROJECT_ROOT / "results" / "predictions"
 TABLES_DIR = PROJECT_ROOT / "results" / "tables"
+TABLES_APPENDIX = TABLES_DIR / "appendix"
+TABLES_DIAG = TABLES_DIR / "diagnostics"
 
 TICKERS = ["AAPL", "JPM", "AMZN"]
 INFOSETS = ["M_HAR", "M_ALL"]
@@ -37,7 +39,7 @@ MCS_SEED = 42
 
 def load_predictions(ticker: str, info_set: str, model: str) -> pd.DataFrame | None:
     """Load one prediction CSV; return None if the file doesn't exist."""
-    path = PREDICTIONS_DIR / f"{ticker}_{info_set}_{model}_h{HORIZON}.csv"
+    path = PREDICTIONS_DIR / f"h{HORIZON}" / f"{ticker}_{info_set}_{model}_h{HORIZON}.csv"
     if not path.exists():
         return None
     return pd.read_csv(path, parse_dates=["date"], index_col="date")
@@ -129,7 +131,8 @@ def main(argv: list[str] | None = None) -> None:
     if args:
         HORIZON = int(args[0])
     log.info("HORIZON h=%d", HORIZON)
-    TABLES_DIR.mkdir(parents=True, exist_ok=True)
+    TABLES_APPENDIX.mkdir(parents=True, exist_ok=True)
+    TABLES_DIAG.mkdir(parents=True, exist_ok=True)
     summary_rows: list[dict] = []
     mcs_long_rows: list[pd.DataFrame] = []
 
@@ -159,8 +162,8 @@ def main(argv: list[str] | None = None) -> None:
             # Pairwise DM
             log.info("  computing pairwise DM (%d models, h=%d)", len(losses.columns), HORIZON)
             stat, pval = compute_pairwise_dm(losses, h=HORIZON)
-            stat.to_csv(TABLES_DIR / f"dm_{ticker}_{info_set}_h{HORIZON}_stat.csv")
-            pval.to_csv(TABLES_DIR / f"dm_{ticker}_{info_set}_h{HORIZON}_pvalue.csv")
+            stat.to_csv(TABLES_APPENDIX / f"dm_{ticker}_{info_set}_h{HORIZON}_stat.csv")
+            pval.to_csv(TABLES_APPENDIX / f"dm_{ticker}_{info_set}_h{HORIZON}_pvalue.csv")
 
             # MCS
             log.info("  computing MCS (%d reps, seed=%d)", MCS_REPS, MCS_SEED)
@@ -171,10 +174,10 @@ def main(argv: list[str] | None = None) -> None:
 
     # Save aggregated tables
     summary = pd.DataFrame(summary_rows)
-    summary.to_csv(TABLES_DIR / f"summary_h{HORIZON}.csv", index=False)
+    summary.to_csv(TABLES_DIAG / f"summary_h{HORIZON}.csv", index=False)
 
     mcs_combined = pd.concat(mcs_long_rows, ignore_index=True)
-    mcs_combined.to_csv(TABLES_DIR / f"mcs_inclusion_h{HORIZON}.csv", index=False)
+    mcs_combined.to_csv(TABLES_APPENDIX / f"mcs_inclusion_h{HORIZON}.csv", index=False)
 
     # Wide-format pivots, one per info_set
     for info_set in INFOSETS:
@@ -182,8 +185,8 @@ def main(argv: list[str] | None = None) -> None:
         order = [m for m in MODEL_ORDER[info_set] if m in sub["model"].unique()]
         pivot_mse = sub.pivot(index="model", columns="ticker", values="test_mse").reindex(order)
         pivot_rel = sub.pivot(index="model", columns="ticker", values="rel_mse_to_HAR").reindex(order)
-        pivot_mse.to_csv(TABLES_DIR / f"mse_{info_set}_h{HORIZON}.csv")
-        pivot_rel.to_csv(TABLES_DIR / f"relative_mse_{info_set}_h{HORIZON}.csv")
+        pivot_mse.to_csv(TABLES_DIAG / f"mse_{info_set}_h{HORIZON}.csv")
+        pivot_rel.to_csv(TABLES_DIAG / f"relative_mse_{info_set}_h{HORIZON}.csv")
 
     # Console summary
     print("\n" + "=" * 80)

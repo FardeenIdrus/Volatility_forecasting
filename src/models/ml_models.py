@@ -345,7 +345,7 @@ def run_one(ticker: str, info_set: str, model_name: str, sp, master: pd.DataFram
     y_test = sp.y_test
     preds_aligned = preds.reindex(y_test.index)
     mse = float(((preds_aligned - y_test) ** 2).mean())
-    out_path = PREDICTIONS_DIR / f"{ticker}_{info_set}_{model_name}_h{h}.csv"
+    out_path = PREDICTIONS_DIR / f"h{h}" / f"{ticker}_{info_set}_{model_name}_h{h}.csv"
     pd.DataFrame({
         "actual": y_test,
         "predicted": preds_aligned,
@@ -421,7 +421,7 @@ def main(argv: list[str] | None = None):
     model_filter = args[1].split(",") if len(args) > 1 else ML_MODELS
     log.info("HORIZON h=%d  models=%s", h, model_filter)
 
-    PREDICTIONS_DIR.mkdir(parents=True, exist_ok=True)
+    (PREDICTIONS_DIR / f"h{h}").mkdir(parents=True, exist_ok=True)
     splits = split_all_stocks()
     results = []
     for ticker in TICKERS:
