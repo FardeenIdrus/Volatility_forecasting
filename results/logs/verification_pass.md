@@ -298,9 +298,12 @@ standardisation §2 p. 1693.
 | Standardisation uses training-set stats only | §2: "sample mean and sample variance from the training set" | `train_mean = X_train.mean()`, `train_std = X_train.std(ddof=0)`; applied to val/test ([split.py:82-83,91-93](../../src/split.py#L82-L93)) | ✓ |
 | ddof for std | Paper says "sample variance" | `ddof=0` (matches sklearn `StandardScaler`) ([split.py:83](../../src/split.py#L83)) | ✓ |
 
-**Note** — our split sizes are 1554/222/445 (h=1; test shorter at h>1), vs the paper's
-2964/424/847. Same 70/10/20 *procedure*; the absolute sizes differ because our sample is
-~2,221 days vs the paper's 4,257. Data-driven, already in CLAUDE.md §4.2/§12.
+**Note** — our split is 1554 train / 222 validation for all three stocks; the test set
+varies slightly by stock — AAPL 445, AMZN 445, JPM 444 (h=1; test shorter at h>1) — vs
+the paper's 2964/424/847. JPM's master is 2,220 rows vs 2,221 for AAPL/AMZN: one extra
+day is removed by the ≥350-bar liquidity filter (2024-06-03, 318 bars). Same 70/10/20
+*procedure*; absolute sizes differ because our sample is ~2,220–2,221 days vs the
+paper's 4,257. Data-driven, already in CLAUDE.md §4.2/§12.
 
 **Note** — HAR family and trees are fit on **raw** (unstandardised) features; only RR/LA/EN/NN
 need standardisation per paper §2 ("for RR, LA, EN, and the NN"). Our rolling ML code
