@@ -1,0 +1,17 @@
+% Table 1: relative MSE vs HAR with DM significance stars.
+% Stars: * p<0.10 ** p<0.05 *** p<0.01 (one-sided HLN-corrected DM, beats HAR).
+% '$-$' = HAR-X equals HAR in M_HAR.
+\begin{tabular}{l rr rr rr rr rr rr}
+\toprule
+ & \multicolumn{4}{c}{AAPL} & \multicolumn{4}{c}{JPM} & \multicolumn{4}{c}{AMZN} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}\cmidrule(lr){10-13}
+Model & \multicolumn{2}{c}{M\_HAR} & \multicolumn{2}{c}{M\_ALL} & \multicolumn{2}{c}{M\_HAR} & \multicolumn{2}{c}{M\_ALL} & \multicolumn{2}{c}{M\_HAR} & \multicolumn{2}{c}{M\_ALL} \\
+ & $h$=1 & $h$=22 & $h$=1 & $h$=22 & $h$=1 & $h$=22 & $h$=1 & $h$=22 & $h$=1 & $h$=22 & $h$=1 & $h$=22 \\
+\midrule
+HAR-X & $-$ & $-$ & 0.991 & 1.048 & $-$ & $-$ & 0.962 & 1.686 & $-$ & $-$ & 1.060 & 1.160 \\
+LogHAR & 0.920* & 0.645*** & 0.898** & 0.711*** & 0.889*** & 0.544*** & 0.668*** & 0.526*** & 1.016 & 1.302 & 0.920** & 1.154 \\
+EN & 1.006 & 1.186 & 0.994 & 1.094 & 1.011 & 1.304 & 0.966 & 1.716 & 1.007 & 1.217 & 0.988 & 1.169 \\
+RF & 1.246 & 2.163 & 0.985 & 1.357 & 1.131 & 2.100 & 0.799*** & 3.797 & 1.301 & 2.893 & 1.085 & 2.620 \\
+NN$_2^{10}$ & 0.958 & 0.843 & 0.971 & 0.986 & 1.022 & 1.408 & 0.843** & 1.505 & 1.010 & 1.234 & 0.966 & 1.004 \\
+\bottomrule
+\end{tabular}

@@ -38,6 +38,7 @@ import statsmodels.api as sm
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from split import split_all_stocks, TICKERS, FINAL_DIR  # noqa: E402
+from horizons import build_h_step_target  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("har_family")
@@ -114,29 +115,38 @@ def predict_ols(ols, X_row: pd.DataFrame) -> float:
 
 
 def initial_fit(master: pd.DataFrame, spec: ModelSpec,
-                test_start_idx: int, window_size: int):
+                test_start_idx: int, window_size: int, h: int):
     """Fit on the first rolling window (= train+val). Used for the coefficient
-    diagnostic and, for LogHAR, to fix the Jensen-bias-correction variance."""
-    fit_df = master.iloc[test_start_idx - window_size:test_start_idx]
+    diagnostic and, for LogHAR, to fix the Jensen-bias-correction variance.
+    Target is master['y_target'], populated by build_h_step_target before fit-time.
+    Window is lagged by h-1 rows so every training label is realised (no look-ahead);
+    for h=1 this is a no-op. The max(0, .) clamp keeps the window start in range."""
+    fit_end = test_start_idx - (h - 1)
+    fit_start = max(0, fit_end - window_size)
+    fit_df = master.iloc[fit_start:fit_end]
     X = build_features(fit_df, spec)
-    y = np.log(fit_df["RV"]) if spec.log_target else fit_df["RV"]
+    y = np.log(fit_df["y_target"]) if spec.log_target else fit_df["y_target"]
     return fit_ols(X, y)
 
 
 def rolling_forecast(master: pd.DataFrame, spec: ModelSpec,
                      test_start_idx: int, window_size: int,
-                     fixed_resid_var: float | None
+                     fixed_resid_var: float | None, h: int
                      ) -> tuple[pd.Series, int, int]:
     """One-day-ahead rolling-window forecast across the test segment.
 
     fixed_resid_var: if not None, used in the LogHAR Jensen bias correction
                      (computed once on the initial fit). Required when log_target.
+    h:               forecast horizon. The training window ends h-1 rows before
+                     the forecast origin so every training label y_target is
+                     realised at the origin (no look-ahead). For h=1 this is a
+                     no-op.
 
     Returns (predictions, n_neg_clip, n_max_clip):
       - predictions: Series indexed by test dates
-      - n_neg_clip:  count of times pred < 0 was replaced with min(in-sample RV)
+      - n_neg_clip:  count of times pred < 0 was replaced with min(in-window target)
                      (applies to all models per paper §1.6)
-      - n_max_clip:  count of times pred > max(in-sample RV) was replaced
+      - n_max_clip:  count of times pred > max(in-window target) was replaced
                      (HARQ only; the BPQ-2016 upper clip)
     """
     if spec.log_target and fixed_resid_var is None:
@@ -149,13 +159,14 @@ def rolling_forecast(master: pd.DataFrame, spec: ModelSpec,
     n_max = 0
 
     for i, target_pos in enumerate(range(test_start_idx, n)):
-        fit_start = target_pos - window_size
-        fit_df = master.iloc[fit_start:target_pos]
+        fit_end = target_pos - (h - 1)
+        fit_start = max(0, fit_end - window_size)
+        fit_df = master.iloc[fit_start:fit_end]
         target_row = master.iloc[[target_pos]]
 
         X_fit = build_features(fit_df, spec)
         X_pred = build_features(target_row, spec)
-        y_fit = np.log(fit_df["RV"]) if spec.log_target else fit_df["RV"]
+        y_fit = np.log(fit_df["y_target"]) if spec.log_target else fit_df["y_target"]
 
         ols = fit_ols(X_fit, y_fit)
         pred = predict_ols(ols, X_pred)
@@ -163,14 +174,15 @@ def rolling_forecast(master: pd.DataFrame, spec: ModelSpec,
         if spec.log_target:
             pred = float(np.exp(pred + 0.5 * fixed_resid_var))
 
-        # Negative-clip for all models (paper §1.6)
+        # Negative-clip for all models (paper §1.6); threshold uses in-window TARGET
+        # (which is daily RV for h=1 and 22-day mean RV for h=22).
         if pred < 0:
-            pred = float(fit_df["RV"].min())
+            pred = float(fit_df["y_target"].min())
             n_neg += 1
 
         # HARQ-only upper clip (BPQ 2016)
-        if spec.apply_harq_upper_clip and pred > float(fit_df["RV"].max()):
-            pred = float(fit_df["RV"].min())
+        if spec.apply_harq_upper_clip and pred > float(fit_df["y_target"].max()):
+            pred = float(fit_df["y_target"].min())
             n_max += 1
 
         preds.iloc[i] = pred
@@ -179,24 +191,25 @@ def rolling_forecast(master: pd.DataFrame, spec: ModelSpec,
 
 
 def run_one(ticker: str, info_set: str, spec: ModelSpec, master: pd.DataFrame,
-            test_start_idx: int) -> dict:
+            test_start_idx: int, h: int) -> dict:
     """Fit one HAR-family (ticker, info_set, spec) combination and return its result dict."""
-    log.info("  fitting %s × %s × %s", ticker, info_set, spec.name)
-    ols0 = initial_fit(master, spec, test_start_idx, WINDOW_SIZE)
+    log.info("  fitting %s × %s × %s (h=%d)", ticker, info_set, spec.name, h)
+    ols0 = initial_fit(master, spec, test_start_idx, WINDOW_SIZE, h)
     fixed_var = float(ols0.resid.var()) if spec.log_target else None
     preds, n_neg, n_max = rolling_forecast(master, spec,
                                             test_start_idx, WINDOW_SIZE,
-                                            fixed_resid_var=fixed_var)
-    actual = master["RV"].iloc[test_start_idx:]
+                                            fixed_resid_var=fixed_var, h=h)
+    actual = master["y_target"].iloc[test_start_idx:]
     mse = float(((preds - actual) ** 2).mean())
 
-    out_path = PREDICTIONS_DIR / f"{ticker}_{info_set}_{spec.name}_h1.csv"
+    out_path = PREDICTIONS_DIR / f"{ticker}_{info_set}_{spec.name}_h{h}.csv"
     pd.DataFrame({"actual": actual, "predicted": preds}).to_csv(out_path)
 
     return {
         "ticker": ticker,
         "info_set": info_set,
         "model": spec.name,
+        "horizon": h,
         "test_mse": mse,
         "mean_predicted": float(preds.mean()),
         "mean_actual": float(actual.mean()),
@@ -210,8 +223,17 @@ def run_one(ticker: str, info_set: str, spec: ModelSpec, master: pd.DataFrame,
     }
 
 
-def main() -> None:
-    """Run all HAR-family fits across 3 stocks and 2 info-sets, then print diagnostics."""
+def main(argv: list[str] | None = None) -> None:
+    """Run all HAR-family fits across 3 stocks and 2 info-sets, then print diagnostics.
+
+    CLI:
+      python src/models/har_family.py        # h=1 (default)
+      python src/models/har_family.py 22     # h=22 (paper §4 monthly horizon)
+    """
+    args = argv if argv is not None else sys.argv[1:]
+    h = int(args[0]) if args else 1
+    log.info("HORIZON h=%d", h)
+
     PREDICTIONS_DIR.mkdir(parents=True, exist_ok=True)
     splits = split_all_stocks()
 
@@ -220,14 +242,20 @@ def main() -> None:
         sp = splits[ticker]
         master = pd.read_csv(FINAL_DIR / f"master_{ticker}.csv",
                              parse_dates=["date"], index_col="date").sort_index()
+        master["y_target"] = build_h_step_target(master["RV"], h)
+        n_before = len(master)
+        master = master.dropna(subset=["y_target"])
         test_start_idx = len(sp.X_train) + len(sp.X_val)
         assert test_start_idx == WINDOW_SIZE, \
             f"expected test_start_idx={WINDOW_SIZE}, got {test_start_idx}"
-        log.info("== %s ==  master rows=%d  test_start_idx=%d  n_test=%d",
-                 ticker, len(master), test_start_idx, len(master) - test_start_idx)
+        log.info("== %s ==  master rows=%d (dropped %d for h=%d tail)  "
+                 "test_start_idx=%d  n_test=%d",
+                 ticker, len(master), n_before - len(master), h,
+                 test_start_idx, len(master) - test_start_idx)
         for info_set in INFOSETS:
             for spec in get_specs(info_set):
-                all_results.append(run_one(ticker, info_set, spec, master, test_start_idx))
+                all_results.append(run_one(ticker, info_set, spec, master,
+                                            test_start_idx, h))
 
     # Print diagnostic table
     for r in all_results:

@@ -1,0 +1,62 @@
+% Table A2: MCS inclusion at 90%. Y = retained, N = eliminated.
+% dagger = MCS unreliable (RF/GB heavy-tailed losses inflate the
+% stationary-bootstrap variance); ddagger = borderline. See footnote.
+\begin{tabular}{l cccccc}
+\toprule
+\multicolumn{7}{l}{\textbf{Horizon $h=1$}} \\
+\midrule
+Model & AAPL M\_HAR & AAPL M\_ALL & JPM M\_HAR & JPM M\_ALL & AMZN M\_HAR & AMZN M\_ALL \\
+\midrule
+HAR & Y & Y & N & N & Y & Y \\
+HAR-X & $-$ & Y & $-$ & N & $-$ & N \\
+LogHAR & Y & Y & Y & Y & Y & Y \\
+HARQ & Y & Y & N & N & Y & N \\
+Lasso & Y & Y & N & N & Y & Y \\
+EN & N & Y & N & N & Y & Y \\
+RF & Y & Y & N & N & Y & N \\
+GB & Y & Y & N & N & Y & N \\
+NN$_2^{10}$ & Y & Y & N & N & Y & Y \\
+\bottomrule
+\end{tabular}
+\vspace{1em}
+
+\begin{tabular}{l cccccc}
+\toprule
+\multicolumn{7}{l}{\textbf{Horizon $h=5$}} \\
+\midrule
+Model & AAPL M\_HAR$^\dagger$ & AAPL M\_ALL$^\dagger$ & JPM M\_HAR & JPM M\_ALL & AMZN M\_HAR$^\ddagger$ & AMZN M\_ALL \\
+\midrule
+HAR & Y & Y & N & N & Y & Y \\
+HAR-X & $-$ & Y & $-$ & N & $-$ & N \\
+LogHAR & Y & Y & Y & Y & Y & Y \\
+HARQ & N & Y & N & N & N & N \\
+Lasso & N & Y & N & N & N & Y \\
+EN & N & N & N & N & N & Y \\
+RF & Y & Y & N & N & N & N \\
+GB & Y & Y & N & Y & N & N \\
+NN$_2^{10}$ & N & N & N & N & Y & Y \\
+\bottomrule
+\end{tabular}
+\vspace{1em}
+
+\begin{tabular}{l cccccc}
+\toprule
+\multicolumn{7}{l}{\textbf{Horizon $h=22$}} \\
+\midrule
+Model & AAPL M\_HAR$^\dagger$ & AAPL M\_ALL & JPM M\_HAR & JPM M\_ALL$^\dagger$ & AMZN M\_HAR & AMZN M\_ALL \\
+\midrule
+HAR & N & N & N & N & Y & Y \\
+HAR-X & $-$ & N & $-$ & N & $-$ & Y \\
+LogHAR & Y & Y & Y & Y & N & Y \\
+HARQ & N & N & N & N & N & Y \\
+Lasso & N & N & N & N & N & Y \\
+EN & N & N & N & N & N & Y \\
+RF & Y & N & N & N & N & N \\
+GB & Y & N & N & Y & N & N \\
+NN$_2^{10}$ & N & N & N & N & N & Y \\
+\bottomrule
+\end{tabular}
+\vspace{1em}
+
+% $^\dagger$ MCS unreliable in this cell (heavy-tailed RF/GB losses).
+% $^\ddagger$ borderline; treat with caution.

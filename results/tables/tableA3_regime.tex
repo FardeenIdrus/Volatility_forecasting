@@ -1,0 +1,86 @@
+% Table A3: regime-split relative MSE vs HAR (M_ALL).
+% Test set split into VIX terciles. Rel MSE < 1 = beats HAR.
+\begin{tabular}{ll rrr}
+\toprule
+\multicolumn{5}{l}{\textbf{Horizon $h=1$}} \\
+\midrule
+Stock & Model & low VIX & mid VIX & high VIX \\
+ & & (12--14) & (14--17) & (17--39) \\
+\midrule
+AAPL & HAR-X & 1.101 & 1.016 & 0.980 \\
+ & LogHAR & 0.950 & 0.907 & 0.893 \\
+ & EN & 1.198 & 1.035 & 0.974 \\
+ & RF & 0.967 & 0.982 & 0.986 \\
+ & NN$_2^{10}$ & 1.085 & 0.942 & 0.965 \\
+\addlinespace
+JPM & HAR-X & 0.734 & 0.742 & 1.115 \\
+ & LogHAR & 0.572 & 0.578 & 0.731 \\
+ & EN & 0.828 & 0.776 & 1.082 \\
+ & RF & 0.698 & 0.794 & 0.828 \\
+ & NN$_2^{10}$ & 1.030 & 0.848 & 0.790 \\
+\addlinespace
+AMZN & HAR-X & 1.077 & 0.980 & 1.095 \\
+ & LogHAR & 0.874 & 0.836 & 0.975 \\
+ & EN & 0.913 & 0.910 & 1.049 \\
+ & RF & 0.939 & 1.177 & 1.080 \\
+ & NN$_2^{10}$ & 0.820 & 0.883 & 1.049 \\
+\bottomrule
+\end{tabular}
+\vspace{1em}
+
+\begin{tabular}{ll rrr}
+\toprule
+\multicolumn{5}{l}{\textbf{Horizon $h=5$}} \\
+\midrule
+Stock & Model & low VIX & mid VIX & high VIX \\
+ & & (12--14) & (14--17) & (17--39) \\
+\midrule
+AAPL & HAR-X & 0.970 & 0.922 & 1.075 \\
+ & LogHAR & 0.909 & 0.847 & 0.751 \\
+ & EN & 1.131 & 0.943 & 1.079 \\
+ & RF & 1.032 & 0.961 & 1.003 \\
+ & NN$_2^{10}$ & 0.986 & 0.947 & 0.848 \\
+\addlinespace
+JPM & HAR-X & 0.845 & 0.872 & 1.570 \\
+ & LogHAR & 0.445 & 0.561 & 0.560 \\
+ & EN & 1.104 & 0.945 & 1.566 \\
+ & RF & 0.498 & 0.679 & 0.658 \\
+ & NN$_2^{10}$ & 0.932 & 1.055 & 0.674 \\
+\addlinespace
+AMZN & HAR-X & 1.027 & 0.967 & 1.329 \\
+ & LogHAR & 0.757 & 0.763 & 1.135 \\
+ & EN & 0.910 & 0.915 & 1.251 \\
+ & RF & 1.048 & 1.046 & 1.705 \\
+ & NN$_2^{10}$ & 0.757 & 0.895 & 1.374 \\
+\bottomrule
+\end{tabular}
+\vspace{1em}
+
+\begin{tabular}{ll rrr}
+\toprule
+\multicolumn{5}{l}{\textbf{Horizon $h=22$}} \\
+\midrule
+Stock & Model & low VIX & mid VIX & high VIX \\
+ & & (12--14) & (14--17) & (17--39) \\
+\midrule
+AAPL & HAR-X & 0.968 & 0.799 & 1.237 \\
+ & LogHAR & 0.812 & 0.612 & 0.705 \\
+ & EN & 0.897 & 1.012 & 1.261 \\
+ & RF & 1.598 & 1.214 & 1.292 \\
+ & NN$_2^{10}$ & 0.914 & 1.010 & 1.015 \\
+\addlinespace
+JPM & HAR-X & 0.429 & 0.681 & 3.229 \\
+ & LogHAR & 0.262 & 0.333 & 0.839 \\
+ & EN & 0.649 & 1.074 & 2.890 \\
+ & RF & 6.853 & 3.917 & 1.565 \\
+ & NN$_2^{10}$ & 1.509 & 1.725 & 1.358 \\
+\addlinespace
+AMZN & HAR-X & 1.024 & 0.910 & 1.471 \\
+ & LogHAR & 0.846 & 0.806 & 1.685 \\
+ & EN & 1.121 & 0.961 & 1.376 \\
+ & RF & 2.011 & 1.209 & 4.245 \\
+ & NN$_2^{10}$ & 0.821 & 0.655 & 1.433 \\
+\bottomrule
+\end{tabular}
+\vspace{1em}
+
