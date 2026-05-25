@@ -18,11 +18,8 @@ results/logs/*
 # Stale local backup of pre-rolling-refit predictions (superseded; not tracked)
 results/predictions_singlefit/
 
-# Local-only docs (not pushed to remote)
-CLAUDE.md
-PROJECT_NOTES.md
 
-# Paper PDFs — kept locally for Claude Code reference, not redistributed
+# Paper PDFs — kept locally, not redistributed due to copyright
 rv1.pdf
 coursework.pdf
 
