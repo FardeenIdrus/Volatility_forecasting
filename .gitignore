@@ -13,7 +13,6 @@ __pycache__/
 # Raw data + intermediate run logs
 data/raw/
 results/logs/*
-!results/logs/verification_pass.md
 
 # Stale local backup of pre-rolling-refit predictions (superseded; not tracked)
 results/predictions_singlefit/
